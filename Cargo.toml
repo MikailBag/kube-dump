@@ -1,3 +1,4 @@
+# syntax = denzp/cargo-wharf-frontend:v0.1.0-alpha.2
 [package]
 name = "kube-dump"
 version = "0.1.0"
@@ -13,3 +14,16 @@ anyhow = "1.0.31"
 http = "0.2.1"
 serde_json = "1.0.55"
 serde = "1.0.114"
+
+[package.metadata.wharf.builder]
+image = "rust"
+
+[package.metadata.wharf.output]
+image = "debian:stable-slim"
+entrypoint = ["/kube-dump"]
+volumes = ["/kube"]
+env = { KUBECONFIG = "/kube/config" }
+
+[[package.metadata.wharf.binary]]
+name = "kube-dump"
+destination = "/kube-dump"
