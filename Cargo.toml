@@ -17,12 +17,18 @@ serde = "1.0.114"
 
 [package.metadata.wharf.builder]
 image = "rust"
+setup-commands = [
+    { shell = "apt-get update && apt-get install -y libssl-dev" }
+]
 
 [package.metadata.wharf.output]
 image = "debian:stable-slim"
 entrypoint = ["/kube-dump"]
 volumes = ["/kube"]
 env = { KUBECONFIG = "/kube/config" }
+pre-install-commands = [
+    { shell = "apt-get update && apt-get install -y libssl-dev" }
+]
 
 [[package.metadata.wharf.binary]]
 name = "kube-dump"
