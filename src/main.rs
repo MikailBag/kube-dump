@@ -52,6 +52,7 @@ async fn dump(client: Client, path: &Path) -> anyhow::Result<()> {
         // Resource::all::<k8s_openapi::api::core::v1::ConfigMap>(),
         // Resource::all::<k8s_openapi::api::core::v1::Secret>(),
         Resource::all::<k8s_openapi::api::core::v1::Service>(),
+        Resource::all::<k8s_openapi::api::core::v1::Node>(),
         // Resource::all::<k8s_openapi::api::core::v1::PersistentVolume>(),
         // Resource::all::<k8s_openapi::api::core::v1::PersistentVolumeClaim>(),
     ];
