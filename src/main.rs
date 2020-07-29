@@ -11,7 +11,7 @@ use kube::{api::LogParams, Api};
 use std::path::PathBuf;
 
 #[derive(Clap)]
-struct Opts {
+pub struct Opts {
     /// Path dump should be written to
     out: PathBuf,
     /// Strips certain data from dumped object representations.
@@ -20,6 +20,9 @@ struct Opts {
     /// not very helpful and wastes much screen space)
     #[clap(long = "generic-strip")]
     strip: Vec<generic::Strip>,
+    /// Escape some chars in names
+    #[clap(long)]
+    escape_paths: bool,
 }
 
 #[tokio::main]
@@ -48,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
 
     let env = Environment {
         client,
-        layout: layout::Layout::new(opts.out.clone()),
+        layout: layout::Layout::new(&opts),
         apis,
         opts,
         kubectl: kubectl::Kubectl::try_new().await,

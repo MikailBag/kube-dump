@@ -45,7 +45,10 @@ impl Kubectl {
         }
     }
 
-    pub async fn exec<S: AsRef<std::ffi::OsStr>>(&self, args: &[S]) -> anyhow::Result<Option<String>> {
+    pub async fn exec<S: AsRef<std::ffi::OsStr>>(
+        &self,
+        args: &[S],
+    ) -> anyhow::Result<Option<String>> {
         if !self.enabled {
             return Ok(None);
         }
@@ -58,6 +61,8 @@ impl Kubectl {
         if !out.status.success() {
             anyhow::bail!("{}", String::from_utf8_lossy(&out.stderr));
         }
-        Ok(Some(String::from_utf8(out.stdout).context("kubectl output was not utf-8")?))
+        Ok(Some(
+            String::from_utf8(out.stdout).context("kubectl output was not utf-8")?,
+        ))
     }
 }
