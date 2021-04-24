@@ -1,4 +1,4 @@
-use crate::discover::ApiResource;
+use kube::api::ApiResource;
 use std::path::PathBuf;
 
 /// Layout tells where specific thing should live
@@ -37,17 +37,17 @@ impl Layout {
     pub fn object_layout(
         &self,
         resource: &ApiResource,
-        namespace: &str,
+        namespace: Option<&str>,
         name: &str,
     ) -> ObjectLayout {
         let mut p = self.root.clone();
-        if namespace.is_empty() {
-            p.push("_global_");
+        if let Some(ns) = namespace {
+            p.push(format!("{}", ns));
         } else {
-            p.push(format!("{}", namespace));
+            p.push("_global_");
         }
-        let full_kind = if let Some(group_name) = resource.group_name() {
-            format!("{}/{}", group_name, resource.kind)
+        let full_kind = if !resource.group.is_empty() {
+            format!("{}/{}", resource.group, resource.kind)
         } else {
             resource.kind.clone()
         };
@@ -72,6 +72,7 @@ impl ObjectLayout {
     pub fn representation(&self) -> PathBuf {
         self.root.join("raw.json")
     }
+    // for pods
     pub fn logs(&self, kind: LogsKind, container_name: &str) -> PathBuf {
         let sfx = match kind {
             LogsKind::Current => "",
@@ -79,5 +80,12 @@ impl ObjectLayout {
         };
         let file_name = format!("logs-{}{}.txt", container_name, sfx);
         self.root.join(file_name)
+    }
+    // for configmaps and secrets
+    pub fn data_piece(&self, key: &str) -> PathBuf {
+        self.root.join(format!("data-{}", key))
+    }
+    pub fn event_log(&self) -> PathBuf {
+        self.root.join("events.txt")
     }
 }

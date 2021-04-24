@@ -1,6 +1,5 @@
 //! Generic dumping behavior
-use crate::discover::ApiResource;
-use crate::ext::ClientExt as _;
+use kube::api::{Api, ApiResource, DynamicObject};
 
 pub enum Strip {
     ManagedFields,
@@ -20,38 +19,50 @@ impl std::str::FromStr for Strip {
 pub async fn dump(env: &crate::Environment) -> anyhow::Result<()> {
     // dump cluster-wide information
     {
-        let version = env.client.cluster_version().await?;
+        let version = env.client.apiserver_version().await?;
         let version = serde_json::to_string_pretty(&version)?;
         tokio::fs::write(env.layout.cluster_version(), version).await?;
     }
     {
-        let apis = serde_json::to_string_pretty(&env.apis)?;
+        let apis = env
+            .apis
+            .iter()
+            .map(
+                |(
+                    ApiResource {
+                        group,
+                        version,
+                        api_version,
+                        kind,
+                        plural,
+                    },
+                    _,
+                )| {
+                    serde_json::json!({
+                        "group": group,
+                        "version": version,
+                        "apiVersion": api_version,
+                        "kind": kind,
+                        "plural": plural
+                    })
+                },
+            )
+            .collect::<Vec<_>>();
+        let apis = serde_json::to_string_pretty(&apis)?;
         tokio::fs::write(env.layout.cluster_api_resources(), apis).await?;
     }
-    for api_resource in &env.apis {
+    for (api_resource, extras) in &env.apis {
+        if !extras.operations.list {
+            continue;
+        }
         if let Err(err) = dump_api_group(env, api_resource).await {
             eprintln!(
                 "Failed to dump {}.{}: {:#}",
-                api_resource.api_group, api_resource.kind, err
+                api_resource.api_version, api_resource.kind, err
             );
         }
     }
     Ok(())
-}
-
-#[derive(serde::Deserialize)]
-struct ObjectList {
-    items: Vec<serde_json::Value>,
-}
-#[derive(serde::Deserialize)]
-struct Object {
-    metadata: ObjectMeta,
-}
-#[derive(serde::Deserialize)]
-struct ObjectMeta {
-    name: String,
-    #[serde(default)]
-    namespace: String,
 }
 
 /// Modifies `object` in-place, applying all requested strips
@@ -71,25 +82,20 @@ async fn dump_api_group(
     env: &crate::Environment,
     api_resource: &ApiResource,
 ) -> anyhow::Result<()> {
-    let url = if api_resource.is_legacy() {
-        format!("/api/{}/{}", api_resource.api_group, api_resource.plural)
-    } else {
-        format!("/apis/{}/{}", api_resource.api_group, api_resource.plural)
-    };
-    let object_list: ObjectList = env
-        .client
-        .request(http::Request::builder().uri(url).body(Vec::new())?)
-        .await?;
-    for object in object_list.items {
-        let object_info: Object = serde_json::from_value(object.clone())?;
+    println!(" - {}.{}", api_resource.kind, api_resource.api_version);
+
+    let api = Api::<DynamicObject>::all_with(env.client.clone(), api_resource);
+
+    let object_list: Vec<DynamicObject> = api.list(&Default::default()).await?.items;
+    for object in object_list {
         let object_layout = env.layout.object_layout(
             api_resource,
-            &object_info.metadata.namespace,
-            &object_info.metadata.name,
+            object.metadata.namespace.as_deref(),
+            object.metadata.name.as_deref().unwrap(),
         );
         let repr_path = object_layout.representation();
         let mut object = object;
-        apply_strips(&mut object, &env.opts.strip);
+        apply_strips(&mut object.data, &env.opts.strip);
         let repr = serde_json::to_string_pretty(&object)?;
         let parent = repr_path.parent().expect("Layout never returns root-path");
         tokio::fs::create_dir_all(parent).await?;
