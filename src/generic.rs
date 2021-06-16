@@ -51,8 +51,8 @@ pub async fn dump(env: &crate::Environment) -> anyhow::Result<()> {
         let apis = serde_json::to_string_pretty(&apis)?;
         tokio::fs::write(env.layout.cluster_api_resources(), apis).await?;
     }
-    for (api_resource, extras) in &env.apis {
-        if !extras.operations.list {
+    for (api_resource, caps) in &env.apis {
+        if !caps.supports_operation(kube::discovery::verbs::LIST) {
             continue;
         }
         if let Err(err) = dump_api_group(env, api_resource).await {

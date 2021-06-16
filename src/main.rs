@@ -9,7 +9,7 @@ use clap::Clap;
 use k8s_openapi::api::core::v1::{ConfigMap, Event, Pod, Secret};
 use kube::{
     api::{Api, ApiResource, LogParams, Resource, ResourceExt},
-    client::ApiResourceExtras,
+    discovery::{ApiCapabilities, Discovery},
 };
 use serde::de::DeserializeOwned;
 use std::{collections::BTreeMap, fmt::Debug, future::Future, path::PathBuf, sync::Arc};
@@ -72,12 +72,12 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn discover_apis(k: &kube::Client) -> anyhow::Result<Vec<(ApiResource, ApiResourceExtras)>> {
-    let discovery = kube::client::Discovery::new(k).await?;
+async fn discover_apis(k: &kube::Client) -> anyhow::Result<Vec<(ApiResource, ApiCapabilities)>> {
+    let discovery = Discovery::new(k.clone()).run().await?;
     let mut res = Vec::new();
     for g in discovery.groups() {
-        let v = g.preferred_version_or_guess();
-        let mut resources = g.resources_by_version(v).into_iter().collect();
+        let v = g.preferred_version_or_latest();
+        let mut resources = g.versioned_resources(v).into_iter().collect();
         res.append(&mut resources);
     }
     Ok(res)
@@ -87,7 +87,7 @@ async fn discover_apis(k: &kube::Client) -> anyhow::Result<Vec<(ApiResource, Api
 pub struct Environment {
     client: kube::Client,
     layout: layout::Layout,
-    apis: Vec<(ApiResource, ApiResourceExtras)>,
+    apis: Vec<(ApiResource, ApiCapabilities)>,
     opts: Opts,
     kubectl: kubectl::Kubectl,
 }
@@ -160,19 +160,17 @@ async fn dump_config_map(
     _env: Arc<Environment>,
     layout: ObjectLayout,
 ) -> anyhow::Result<()> {
-    if let Some(bin) = cmap.binary_data {
-        for (key, value) in bin {
-            tokio::fs::write(layout.data_piece(&key), value.0).await?;
-        }
+    for (key, value) in cmap.binary_data {
+        tokio::fs::write(layout.data_piece(&key), value.0).await?;
     }
-    if let Some(data) = cmap.data {
-        for (key, value) in data {
-            let path = layout.data_piece(&key);
-            tokio::fs::write(&path, value)
-                .await
-                .with_context(|| format!("Failed to write to {}", path.display()))?;
-        }
+
+    for (key, value) in cmap.data {
+        let path = layout.data_piece(&key);
+        tokio::fs::write(&path, value)
+            .await
+            .with_context(|| format!("Failed to write to {}", path.display()))?;
     }
+
     Ok(())
 }
 
@@ -181,11 +179,10 @@ async fn dump_secret(
     _env: Arc<Environment>,
     layout: ObjectLayout,
 ) -> anyhow::Result<()> {
-    if let Some(data) = secret.data {
-        for (key, value) in data {
-            tokio::fs::write(layout.data_piece(&key), value.0).await?;
-        }
+    for (key, value) in secret.data {
+        tokio::fs::write(layout.data_piece(&key), value.0).await?;
     }
+
     Ok(())
 }
 
