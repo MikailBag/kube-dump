@@ -23,13 +23,10 @@ setup-commands = [
 ]
 
 [package.metadata.wharf.output]
-image = "debian:stable-slim"
+image = "gcr.io/distroless/cc:latest"
 entrypoint = ["/kube-dump"]
 volumes = ["/kube"]
 env = { KUBECONFIG = "/kube/config" }
-pre-install-commands = [
-    { shell = "apt-get update && apt-get install -y libssl-dev" }
-]
 
 [[package.metadata.wharf.binary]]
 name = "kube-dump"
